@@ -198,7 +198,7 @@ def LocWidthFixedFit(data, bckg,wav_vec,p0=None,ph_per_count=1,readout_noise=0,
     
     nw = data.shape[1]
     
-    
+ 
     #initial guess
     if p0 is None:
         mdata = (data-bckg).mean(0)
@@ -212,25 +212,40 @@ def LocWidthFixedFit(data, bckg,wav_vec,p0=None,ph_per_count=1,readout_noise=0,
         p0 = [B,A,s0,x0]
     else:
         [B,A,s0,x0] = p0
-
+    
     def cost_fun(par,x, y, return_results=False):
         x0,s = par 
 
         gauss = exp(-((x-x0)/s)**2/2)/(s*sqrt(2*pi))
-        background = np.ones_like(x)
-        A = np.vstack((gauss,background )).T
+        background0 = np.ones_like(x)
+        background1 = x-x0
+        A = np.vstack((gauss,background0, background1 )).T
         coeff,r,rr,s = np.linalg.lstsq(A, y.T, rcond=None)
+        coeff[0] = np.abs(coeff[0])
+      
+        r = np.sum((np.dot(A, coeff) - y.T)**2,0)
+      
         if return_results:
             chi2_dof = r/(len(x)-rr)
-            err = np.sqrt(np.linalg.inv(np.dot(A.T,A))[0,0]*chi2_dof)
+            try:
+                err = np.sqrt(np.linalg.inv(np.dot(A.T,A))[0,0]*chi2_dof)
+            except: err =  np.inf  * coeff[0]
+           
             return coeff.T, np.dot(A, coeff).T, err
         return r
     
     nw = len(wav_vec)
     out = least_squares(cost_fun, (x0,s0),args=( wav_vec,data- bckg ), 
-                        bounds=((wav_vec.min(), 0),(wav_vec.max(),  np.ptp(wav_vec))))    #hardcoded maximal and mininal line width 
+                        bounds=((wav_vec.min(), 0),(wav_vec.max(),  np.ptp(wav_vec))))    #hardcoded maximal and mininal line width
+
+
+    
 
     coeff,model,err = cost_fun(out.x,wav_vec, data- bckg ,return_results=True)
+    #plt.plot(model.T,'--')
+    #plt.plot(data.T,'-')
+    #plt.show()
+
     return coeff.T,model,err.T
  
 
@@ -284,8 +299,8 @@ def fast_recursive_fit(data, bckg,wav_vec,p0=None,ph_per_count=1,readout_noise=0
         b = bckg[:(nt//step)*step].reshape(-1, step, nw)
 
         
-        d = d.mean(1)
-        b = b.mean(1)
+        d = np.median(d, 1)
+        b = np.median(b, 1)
          
         outputs = zeros((nt//step, npar))
         _X0 = solution[::step]
@@ -320,7 +335,7 @@ def fast_recursive_fit(data, bckg,wav_vec,p0=None,ph_per_count=1,readout_noise=0
                 chi2n[i] = out.cost/(len(wav_vec)-npar)
                 success[i] = out.success
                 try:
-                    solution_err[i] = sqrt(diag(linalg.pinv(dot(out.jac.T, out.jac)))*chi2n[i])
+                    solution_err[i] = sqrt(diag(linalg.pinv(dot(out.jac.T, out.jac)))*max(1,chi2n[i]))
                 except:
                     embed()
             if False:
