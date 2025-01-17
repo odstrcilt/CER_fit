@@ -25,10 +25,10 @@ remove_elms = False
 chords = ['M%.2d'%i for i in np.r_[17:33]]
 #chords = ['M31']
 #chords = ['M%.2d'%i for i in range(29,33)]
-from map_equ import equ_map
+#from map_equ import equ_map
 
-equ = equ_map(MDSplus.Connection(mdsserver))
-equ.Open(shot,diag='EFIT01')
+#equ = equ_map(MDSplus.Connection(mdsserver))
+#equ.Open(shot,diag='EFIT01')
 
 beams = get_beams(shot)
 
