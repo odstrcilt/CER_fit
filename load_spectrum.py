@@ -63,7 +63,7 @@ def load_chord(shot, chord, white_corr=1):
     #tV = t_start + 0.5*t_integ# % central measurement time [ms]
     dt = mean(t_integ)# % integration time [ms]
 
-    return wavelength, t_start, t_integ ,raw_gain, spectra, pe, readout_noise
+    return wavelength, t_start, dt,raw_gain, spectra, pe, readout_noise
  
 
 def beam_chord(chord):
@@ -259,23 +259,21 @@ def get_beamgeom(shot, chord, beam ):
     if isys!= 0:
        G = MDSconn.get(calib+'BEAMGEOMETRY').data()[ibeam]
     else: 
-       #No geomtry factros for MICER system, estimate from tangential impurity system
-
         #simple estimate of G from nearest tangential CER system
-        if int(chord[1:]) < 9: #core MICER
+        if int(chord[1:]) < 9: #core
             cer_ch = r_[1:8, 17: 23]
-            return 3.7 #better to use a fixed value 
         else:
             cer_ch = r_[9:17, 41: 49]
  
         R  = MDSconn.get(f'\\IONS::TOP.{subtree}.CALIBRATION.TANGENTIAL.CHANNEL{chord[1:]}:PLASMA_R').data()[ibeam]
-        R_cer  = [MDSconn.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL%.2d:PLASMA_R'%j).data()[ibeam] 
-for j in cer_ch]
-        G_cer = [MDSconn.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL%.2d:BEAMGEOMETRY'%j).data()[ibeam] 
-for j in cer_ch]
-    
-    G = np.interp(R, np.sort(R_cer), np.array(G_cer)[np.argsort(R_cer)])
-
+        dR = 100
+        G = 0
+        for j in cer_ch:
+            R2  = MDSconn.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL%.2d:PLASMA_R'%(j)).data()[ibeam]
+            if dR > abs(R2-R):
+               dR = abs(R2-R)
+               G = MDSconn.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL%.2d:BEAMGEOMETRY'%(j)).data()[ibeam]
+        
    
     return G
 
@@ -665,11 +663,10 @@ def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 1, passive=False):
             average beam power over the beam blip
     """
     
-    beam_on = (beam_pow > 0.5e6)
-    beam_off = (beam_pow < 0.5e6)
+    beam_on = (beam_pow > 1e6)
+    beam_off = (beam_pow < 1e6)
     
-    if np.size(dt) == 1:
-        dt = dt + np.zeros_like(tvec)
+     
     
     dbeam = diff(float_(beam_on))
     start = where(dbeam == 1)[0]+1+skip_first
@@ -705,7 +702,7 @@ def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 1, passive=False):
         if passive:
             data.append(bckg1.mean(0))
             tvec_.append(tbckg1[0])
-            stime.append(dt[off_start[ioff]:off_end[ioff]].sum())
+            stime.append(dt*len(tbckg1))
             beam_bg = beam_pow[off_start[ioff]:off_end[ioff]].mean()
             pow_avg.append(beam_bg)
             #substract  any contribution from the time when the beam was still on. 
@@ -717,18 +714,17 @@ def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 1, passive=False):
         else:
              sig = spectrum[start[i+1]:end[i+1]]
              tvec_.append(tvec[start[i+1]])
-             stime.append(dt[start[i+1]:end[i+1]].sum())
+             stime.append(dt*(end[i+1]-start[i+1]))
              bckg.append((bckg1.mean(0)+bckg2.mean(0))/2)
              data.append(sig.mean(0))
              pow_avg.append(beam_pow[start[i+1]:end[i+1]].mean())
-
  
     tvec_ = hstack(tvec_)
     stime = hstack(stime)
     data = vstack(data)
     bckg = vstack(bckg)
     pow_avg = hstack(pow_avg)
-       
+    
     return tvec_, stime, data, bckg, pow_avg
     
   
