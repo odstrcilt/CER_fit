@@ -12,8 +12,8 @@ from load_spectrum import *
  
 
 
-shot  = 199103
-tmin,tmax = 2000, 6000
+shot  = 174601
+tmin,tmax = 3000,3500
 blip_avg = True
 remove_elms = True
 
