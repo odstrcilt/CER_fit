@@ -250,8 +250,13 @@ def get_beamgeom(shot, chord, beam ):
     MDSconn.openTree('IONS', shot)
   
     BEAM_ORDER = MDSconn.get(f'\\IONS::TOP.{subtree}.CALIBRATION:BEAM_ORDER').data()
- 
-    BEAM_ORDER = [b.decode()[:2]+b.decode().strip()[-2] for b in BEAM_ORDER]
+    
+    try:
+        BEAM_ORDER = [b.decode() for b in BEAM_ORDER]
+    except:
+        pass
+        
+    BEAM_ORDER = [b[:2]+b.strip()[-2] for b in BEAM_ORDER]
 
     ibeam = BEAM_ORDER.index(beam)
   
@@ -336,8 +341,17 @@ def get_coord(shot, chord, beam, tvec, equ=None,  coord_out='Psi_N' ,diag='EFIT0
 
     BEAM_ORDER = MDSconn.get(f'\\IONS::TOP.{subtree}.CALIBRATION:BEAM_ORDER').data()
 
-    BEAM_ORDER = [b.decode()[:2]+b.decode().strip()[-2] for b in BEAM_ORDER]
 
+    
+    try:
+        BEAM_ORDER = [b.decode() for b in BEAM_ORDER]
+    except:
+        pass
+        
+    BEAM_ORDER = [b[:2]+b.strip()[-2] for b in BEAM_ORDER]
+
+
+ 
     ibeam = BEAM_ORDER.index(beam)
     
  
