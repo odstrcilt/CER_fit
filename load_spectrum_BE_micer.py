@@ -26,7 +26,7 @@ equ.Open(shot,diag='EFIT01')
 
 beams = get_beams(shot)
 
-elms = slice(None,None)
+noelms = slice(None,None)
 if remove_elms:
     chord = 'M25'
     wavelength, t_start, dt,raw_gain, spectra, pe, readout_noise  = load_chord(shot, chord)
@@ -41,7 +41,7 @@ if remove_elms:
 
     H0 = spectra[tsmin:tsmax,wmin:wmax].mean(1)
     #super simple estimate of ELMS!!
-    elms = H0/np.median(H0) > 1.3
+    noelms = H0/np.median(H0) < 1.3
 
 
 
@@ -67,8 +67,8 @@ for chord in chords:
     if any(t_start > t_end):
     	spectra -= spectra[t_start > t_end].mean(0)
     
-    spectra= spectra[tsmin:tsmax][~elms]
-    tvec = t_start[tsmin:tsmax][~elms]
+    spectra= spectra[tsmin:tsmax][noelms]
+    tvec = t_start[tsmin:tsmax][noelms]
 
 
     #estimate wavelength from Dalpha peak at 656.1nm
