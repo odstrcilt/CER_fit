@@ -250,8 +250,13 @@ def get_beamgeom(shot, chord, beam ):
     MDSconn.openTree('IONS', shot)
   
     BEAM_ORDER = MDSconn.get(f'\\IONS::TOP.{subtree}.CALIBRATION:BEAM_ORDER').data()
- 
-    BEAM_ORDER = [b.decode()[:2]+b.decode().strip()[-2] for b in BEAM_ORDER]
+    
+    try:
+        BEAM_ORDER = [b.decode() for b in BEAM_ORDER]
+    except:
+        pass
+        
+    BEAM_ORDER = [b[:2]+b.strip()[-2] for b in BEAM_ORDER]
 
     ibeam = BEAM_ORDER.index(beam)
   
@@ -278,7 +283,7 @@ def get_beamgeom(shot, chord, beam ):
     return G
 
 
-def get_coord(shot, chord, beam, tvec, equ=None,  coord_out='Psi_N' ,diag='EFIT03'):
+def get_coord(shot, chord, beam, tvec, equ=None,  coord_out='Psi_N' ,diag='EFIT01'):
     """
     Get beam geometry factor for active CX lines
 
@@ -336,8 +341,17 @@ def get_coord(shot, chord, beam, tvec, equ=None,  coord_out='Psi_N' ,diag='EFIT0
 
     BEAM_ORDER = MDSconn.get(f'\\IONS::TOP.{subtree}.CALIBRATION:BEAM_ORDER').data()
 
-    BEAM_ORDER = [b.decode()[:2]+b.decode().strip()[-2] for b in BEAM_ORDER]
 
+    
+    try:
+        BEAM_ORDER = [b.decode() for b in BEAM_ORDER]
+    except:
+        pass
+        
+    BEAM_ORDER = [b[:2]+b.strip()[-2] for b in BEAM_ORDER]
+
+
+ 
     ibeam = BEAM_ORDER.index(beam)
     
  
@@ -442,6 +456,13 @@ def get_wavelength(shot, chord, lam0, npix):
         if chord in  ['V%.2d'%i for i in [10,12,14,16]]:
              lam0 +=-6          
 
+    if shot in range(199100, 199112):
+  
+        if chord in  ['T%.2d'%i for i in range(5, 9)]:
+             lam0-=+13
+    if shot in [199102, 199103, 199111]:
+        if chord in  ['T10','T12', 'T08']:
+             lam0+=+1
 
     if shot in [190652,190653,190654]:
   
@@ -501,7 +522,7 @@ def load_all_channels(shot):
 
 
 
-def get_beams(shot, fast_data = True):
+def get_beams(shot, fast_data = True, load_beams = ['30L','33L', '30R','33R',]):
     """
     Get a dictionary of functions that returns beam power integrated over the integration time of CCD
  
@@ -518,8 +539,8 @@ def get_beams(shot, fast_data = True):
     """
     MDSconn.openTree('NB',  shot)  
 
-    _load_beams = ['30L','33L', '30R','33R',]
-    paths = ['\\NB::TOP.NB{0}:'.format(b[:2]+b[-1]) for b in _load_beams] 
+ 
+    paths = ['\\NB::TOP.NB{0}:'.format(b[:2]+b[-1]) for b in load_beams] 
     s = 'F' if fast_data else ''
     TDI  = [p+'PINJ'+s+'_'+p[-4:-1] for p in paths]
     TDI += ['dim_of('+TDI[0]+')']
@@ -531,7 +552,7 @@ def get_beams(shot, fast_data = True):
     from scipy.integrate import cumtrapz
     from scipy.interpolate import interp1d
  
-    for b,power in zip(_load_beams, beams_data):
+    for b,power in zip(load_beams, beams_data):
         cpow = cumtrapz(power, pow_tvec, initial=0)
         beams[b] = interp1d(pow_tvec, cpow, bounds_error=False,assume_sorted=True,
                               fill_value=(0, cpow[-1])) 
@@ -591,7 +612,7 @@ def get_tssub(beams, t_start, dt, beam):
 
     return tssub,  ts_
 
-def remove_spikes(spect,sigma=5):
+def remove_spikes(spect,n=9, m = 3, sigma=5):
     """
     Remove gamma spikes from the spectra
  
@@ -610,7 +631,7 @@ def remove_spikes(spect,sigma=5):
     from scipy.signal import order_filter
 
     #order filter over 9 channels, for each timeslice independently
-    filt_spect = order_filter(spect, ones((1,9)), 3)
+    filt_spect = order_filter(spect, ones((1,n)), m)
 
     noise = spect-filt_spect
     noise[:,[0,-1]] = 0 #issues with order filter at the edge 
@@ -624,7 +645,7 @@ def remove_spikes(spect,sigma=5):
 
  
   
-def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 1, passive=False):
+def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 0, passive=False):
     """
     Average emission over the whole beam blip
  
@@ -668,6 +689,7 @@ def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 1, passive=False):
     if not any(beam_on) and not passive :
         raise Exception('Beam is always off')
     else:
+        #embed()
         if end[0] < start[0]:
             start  = hstack((0,start))
     
@@ -693,7 +715,7 @@ def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 1, passive=False):
         bckg2 = spectrum[off_start[ioff+1]:off_end[ioff+1]]
         if passive:
             data.append(bckg1.mean(0))
-            tvec_.append(tbckg1.mean())
+            tvec_.append(tbckg1[0])
             stime.append(dt*len(tbckg1))
             beam_bg = beam_pow[off_start[ioff]:off_end[ioff]].mean()
             pow_avg.append(beam_bg)
