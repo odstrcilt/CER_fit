@@ -12,17 +12,38 @@ from load_spectrum import *
  
 
 
-shot  = 175674
-tmin,tmax = 2300, 5000
-blip_avg = False
-remove_elms = False
+shot  = 174601
+tmin,tmax = 3000,3500
+blip_avg = True
+remove_elms = True
 
 chords = ['M%.2d'%i for i in range(17,33)]
 
+from map_equ import equ_map
 
+equ = equ_map(MDSplus.Connection(mdsserver))
+equ.Open(shot,diag='EFIT01')
 
 beams = get_beams(shot)
- 
+
+noelms = slice(None,None)
+if remove_elms:
+    chord = 'M25'
+    wavelength, t_start, dt,raw_gain, spectra, pe, readout_noise  = load_chord(shot, chord)
+    wav_vec, disp = get_wavelength(shot, chord, wavelength, spectra.shape[1])
+    tsmin,tsmax = t_start.searchsorted([tmin,tmax])
+    mspectra = spectra[tsmin:tsmax].mean(0)
+    imax = np.argmax(mspectra)
+    w0 = np.sum(mspectra[imax-20:imax+20] * wav_vec[imax-20:imax+20])/np.sum(mspectra[imax-20:imax+20])
+    wav_vec += 6561 - w0
+    wmin,wmax = (-wav_vec).searchsorted([ -6565,-6555])
+
+
+    H0 = spectra[tsmin:tsmax,wmin:wmax].mean(1)
+    #super simple estimate of ELMS!!
+    noelms = H0/np.median(H0) < 1.3
+
+
 
 cer_data = {}
 #equ = None
@@ -46,57 +67,79 @@ for chord in chords:
     if any(t_start > t_end):
     	spectra -= spectra[t_start > t_end].mean(0)
     
-    spectra= spectra[tsmin:tsmax]
-    tvec = t_start[tsmin:tsmax]
+    spectra= spectra[tsmin:tsmax][noelms]
+    tvec = t_start[tsmin:tsmax][noelms]
 
+
+    #estimate wavelength from Dalpha peak at 656.1nm
+    mspectra = spectra.mean(0)
+    imax = np.argmax(mspectra)
+    w0 = np.sum(mspectra[imax-20:imax+20] * wav_vec[imax-20:imax+20])/np.sum(mspectra[imax-20:imax+20])
+    wav_vec += 6561 - w0
  
     #remove spikes from gamma and neutron radiation
     spectra = remove_spikes(spectra)
 
     #detect and remove ELMs detected as spikes in Dalpha line
-    if remove_elms:
-        wmin,wmax = (-wav_vec).searchsorted([-6560, -6550])
-        H0 = spectra[:,wmin:wmax].mean(1)
-        elms = H0/np.median(H0) > 1.3
-        spectra= spectra[ ~elms ]
-        tvec = tvec[ ~elms]
+
  
 
     nbi = '30' if int(chord[1:]) < 9 else '33'
     power = beams(nbi+'L',tvec,dt)+beams(nbi+'R',tvec,dt)
+
+    tssub, ts = get_tssub(beams, tvec,dt , nbi+'R')
    
 
     if blip_avg:
    	 tvec, stime,spectra, bg_spectra, pow_avg  = blip_average(spectra, tvec, dt, power,skip_first =  0, passive=False)
     else:
-         spectra= spectra[power > 5e5 ]
-         tvec = tvec[power > 5e5]
-         bg_spectra = spectra  * 0
+         #print(tvec.shape,spectra.shape, )
+         bg_spectra = spectra[tssub]
+         spectra= spectra[ts ]
+         tvec = tvec[ts]
 
  
+    """
+    plt.plot(wav_vec,spectra.T-bg_spectra.T,'b')
+    plt.plot(wav_vec,spectra.T ,'r')
+    plt.plot(wav_vec, bg_spectra.T,'g')
+    plt.xlim(6575,6595)
+    plt.ylim(0, 150)
+    plt.show()
+
+    continue
+    """
  
-    #equ, Psi_N_LOS, Psi_N_NBI, PLASMA_R, PLASMA_Z, R, Z, L = get_coord(shot, chord, nbi, tvec, equ=equ, diag='EFIT01')
+    equ, Psi_N_LOS, Psi_N_NBI, PLASMA_R, PLASMA_Z, R, Z, L = get_coord(shot, chord, '33R', tvec, equ=equ, diag='EFIT01')
    
     #BE intesnity and its uncertainty
     A_tot = np.zeros_like(tvec)
     Ae_tot = np.zeros_like(tvec)
    
     #wavelength range of the BE spectra
-    wmin,wmax,c = [6589-6, 6610-4 ,'r'] 
-
+    wmin,wmax,c = [6583,6605 ,'r'] 
+    #wmin,wmax,c = [6570,6600 ,'r'] 
     lpix,upix = (-wav_vec).searchsorted([-wmax,-wmin])
     
     #try to find a maximum of BE spectra
     imax =np.argmax(np.mean(spectra[:,lpix:upix]-bg_spectra[:,lpix:upix],0))
     wmid = wav_vec[lpix:upix][imax]
+   # wmid = 6587
     
 
-    p0 = [0,60,1,wmid-3.3, 120,1,wmid,60,1,wmid+3.3]
+   # p0 = [0,60,1,wmid-3.3, 120,1,wmid,60,1,wmid+3.3]
 
-    wmin = wmid - 5
+    wmin = wmid - 6
     wmax = wmid + 15
     lpix,upix = (-wav_vec).searchsorted([-wmax,-wmin])
     
+  #  plt.plot(wav_vec[lpix:upix], spectra[:,lpix:upix].T-bg_spectra[:,lpix:upix].T)
+  #  plt.plot(wav_vec[lpix:upix], bg_spectra[:,lpix:upix].T,'r')
+  ##  plt.axvline(6587)
+  #  plt.show()
+    #continue
+
+    background = bg_spectra[:,lpix:upix].mean(0)
 
  
     #fit BE spectra
@@ -109,7 +152,7 @@ for chord in chords:
         spectrum += np.exp(-(x-x0)**2/(2*w**2))/np.sqrt(2*np.pi)/w
         spectrum += A2*np.exp(-(x-x0+s)**2/(2*w**2))/np.sqrt(2*np.pi)/w
 
-        A = np.vstack((spectrum, np.ones_like(x))).T
+        A = np.vstack((spectrum, np.ones_like(x), background)).T
 
         coeff,r,rr,s = np.linalg.lstsq(A, y.T, rcond=None)
 
@@ -125,7 +168,13 @@ for chord in chords:
                 #hardcoded maximal and mininal line width 
     
     coeff,data_fit,Ae = cost_fun(out.x,wav_vec[lpix:upix], active_spect ,return_results=True)
-    A,B = coeff.T
+
+   # plt.plot(wav_vec[lpix:upix], active_spect.T,'r')
+   # plt.plot(wav_vec[lpix:upix], data_fit.T,'b')
+   # plt.axvline(wmid)
+   ## plt.show()
+    #continue
+    A,B,C = coeff.T
     data_fit += bg_spectra[:,lpix:upix]
 
  
@@ -136,11 +185,11 @@ for chord in chords:
 
 
     cer_data[chord] = { 't_start': tvec ,'dt': dt,'full':np.single(A),
-            'full_err': np.single(Ae),  }
+            'full_err': np.single(Ae), 'R':  PLASMA_R }
     
-    #continue
+    continue
     
-    f,ax = subplots(4,1,figsize=(5,12),sharex=True)
+    f,ax = subplots(4,1,figsize=(5,9),sharex=True)
     f.suptitle(chord)
     sca(ax[0])
     errorbar(tvec, A, Ae ) 
@@ -149,10 +198,11 @@ for chord in chords:
     sca(ax[1])
     
     vmax=mquantiles(spectra[:,lpix:upix],0.99)
-    pcolormesh(tvec,wav_vec[lpix:upix], spectra[:,lpix:upix].T ,vmin=0,vmax=vmax )
+    pcolormesh(tvec,wav_vec[lpix:upix], spectra[:,lpix:upix].T-bg_spectra[:,lpix:upix].T ,vmin=0,vmax=vmax )
     sca(ax[2])
-    pcolormesh(tvec,wav_vec[lpix:upix], data_fit.T ,vmin=0,vmax=vmax  )
+    pcolormesh(tvec,wav_vec[lpix:upix], data_fit.T -bg_spectra[:,lpix:upix].T,vmin=0,vmax=vmax  )
     sca(ax[3])
+    plt.tight_layout()
 
 
     resid = spectra[:,lpix:upix]-data_fit
@@ -162,7 +212,7 @@ for chord in chords:
     show()
 
  
-
+plt.show()
  
 
  
@@ -170,9 +220,14 @@ for chord in chords:
 savez_compressed('BE_signal_%d'%shot,**cer_data)
  
 figure()
+#for chord in chords:
+#    plot(cer_data[chord]['t_start'], cer_data[chord]['full'],'.')
+#    text(cer_data[chord]['t_start'].mean(), cer_data[chord]['full'].mean()*1.1, chord)
+
 for chord in chords:
-    plot(cer_data[chord]['t_start'], cer_data[chord]['full'],'.')
-    text(cer_data[chord]['t_start'].mean(), cer_data[chord]['full'].mean()*1.1, chord)
+    plot(cer_data[chord]['R'], cer_data[chord]['full'].mean(),'.')
+
+
 
 
 
