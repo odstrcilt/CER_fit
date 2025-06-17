@@ -8,7 +8,6 @@ try:
     import cer_fit 
     import interface_w_CER  
     import load_spectrum  
-    
 except:
   
     print("""Try first:
@@ -23,7 +22,6 @@ module load ceromfit
 import matplotlib.pyplot as plt
 import numpy as np
 from draggableColorbar import DraggableColorbar
-import itertools
 import lbo_helpers
 from matplotlib.widgets import RectangleSelector,SpanSelector, MultiCursor
 from scipy.optimize import least_squares,curve_fit
@@ -64,7 +62,7 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
 
     if not (channel in ['T%.2d'%i for i in np.r_[1:8, 17:23, 25:29]] or channel in ['M%.2d'%i for i in np.r_[1:9]]) :
         raise Exception('Only channels from 30L and 30R beams are supported!')
-        
+    
     beams = load_spectrum.get_beams(shot)
     wavelength, t_start, dt,raw_gain, spectra, pe, readout_noise  = load_spectrum.load_chord(shot, channel)
     print('Fetched')
@@ -81,15 +79,20 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
     #NBI power at these times
     pownbi = beams('30L',t_start,dt) + beams('30R',t_start,dt)
     
-    
+
     if average_over_beam_blip:
         time, stime, spectra, bg_spectra, pow_avg  = load_spectrum.blip_average(spectra, t_start, dt, pownbi)
 
     else:
-        bg_spectra = spectra[tssub]
+        time = t_start[ts]
+        #this will aveverage passive spectra over the whole notch region 
+        time_passive,_, spectra_passive, _, _= load_spectrum.blip_average(spectra, t_start, dt, pownbi, passive=True)
+        from scipy.interpolate import interp1d
+        bg_spectra = interp1d(time_passive, spectra_passive, axis=0)(np.clip(time, time_passive[0], time_passive[-1]))
+        #bg_spectra = spectra[tssub]
         spectra = spectra[ts]
         pow_avg = pownbi[ts] - pownbi[tssub]         
-        time = t_start[ts]
+   
     
     #correction for varying NBI power
     pow_avg /= pow_avg.mean()
@@ -108,7 +111,7 @@ class CER_interactive:
         self.shot = shot
         self.channel = channel
         self.add_offset = add_offset
-
+        print('Start')
         self.time, self.lam, self.spectrum, self.bg_spectrum = load_cer_spectra(shot, channel, average_over_beam_blip)
         connection = MDSplus.Connection('atlas.gat.com')
         
@@ -368,8 +371,13 @@ class CER_interactive:
             return r
             
         w0 = 0.1/2.355
-        out = least_squares(cost_fun, ((x1+x2)/2,(x2-x1)/4),args=(lam_slice, spec_slice), 
-                            bounds=((x1,w0),(x2,max(w0*2, (x2-x1)/3))))    #hardcoded maximal and mininal line width 
+        try:
+            out = least_squares(cost_fun, ((x1+x2)/2,(x2-x1)/4),args=(lam_slice, spec_slice), 
+                            bounds=((x1,w0),(x2,max(w0*2, (x2-x1)/3))))    
+        except:
+            return 
+            
+            
         coeff,model,err = cost_fun(out.x,lam_slice, spec_slice ,return_results=True)
         try:
             x0,s = out.x

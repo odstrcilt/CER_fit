@@ -175,17 +175,17 @@ for chord in chords:
    ## plt.show()
     #continue
     A,B,C = coeff.T
-    data_fit += bg_spectra[:,lpix:upix]
+    #data_fit += bg_spectra[:,lpix:upix]
 
  
     A /= dt*1e-3  # convert data to [counts/s]
-    A /= calib#*disp; # convert to [photons/m^2/s/ster]
+    A /= calib#*disp; # convert to [photons/m^2/s/ster]interface_w_CER.py
     Ae /= dt*1e-3  # convert data to [counts/s]
     Ae /= calib#*disp; # convert to [photons/m^2/s/ster]
 
 
     cer_data[chord] = { 't_start': tvec ,'dt': dt,'full':np.single(A),
-            'full_err': np.single(Ae), 'R':  PLASMA_R }
+            'full_err': np.single(Ae), 'R':  PLASMA_R }interface_w_CER.py
     
     continue
     

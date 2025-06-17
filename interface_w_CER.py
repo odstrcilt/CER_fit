@@ -32,16 +32,13 @@
 # / 		  DONE reset_ccd_cache
 # / 
 
-from IPython import embed
+
 import pickle, socket
 import numpy as np
 import ctypes
-#from MDSplus import *
+
 import scipy.io
 
-#shotnumber = int(sys.argv[1])
-#chord = str(sys.argv[2])
-from IPython import embed
 
 host_name = socket.gethostname()
 
