@@ -365,6 +365,52 @@ def fast_recursive_fit(data, bckg,wav_vec,p0=None,ph_per_count=1,readout_noise=0
         
     return solution,solution_err,data_fit,chi2n,success
 
+
+
+def fit_fixed_shape_gauss(wav_vec, spectra, bg_spectra):
+
+    active = spectra-bg_spectra
+    wav_vec = wav_vec
+    bg_spectra = bg_spectra
+ 
+
+    background = bg_spectra.mean(0)
+
+ 
+    #fit BE spectra
+    from scipy.optimize import least_squares
+
+    def cost_fun(par,x, y, return_results=False):
+        x0, w  = par
+        spectrum = np.exp(-(x-x0)**2/(2*w**2))/np.sqrt(2*np.pi)/np.abs(w)
+
+        A = np.vstack((spectrum, np.ones_like(x), background)).T
+
+        coeff,r,rr,s = np.linalg.lstsq(A, y.T, rcond=None)
+
+        if return_results:
+            chi2_dof = r/(len(x)-rr)
+            err = np.sqrt(np.linalg.pinv(np.dot(A.T,A))[0,0]*chi2_dof)
+            return coeff.T, np.dot(A, coeff).T, err
+        return r
+        
+   # initial guess for gaussian width is one thord of the selected region
+    width0 = (wav_vec[-1]-wav_vec[0]) / 3
+    wmid0 =  wav_vec[np.argmax(active.mean(0))]
+    out = least_squares(cost_fun, (wmid0, width0),args=(wav_vec, active))
+                #hardcoded maximal and mininal line width 
+    
+    coeff,data_fit,Ae = cost_fun(out.x, wav_vec, active,return_results=True)
+
+
+    A,B1,B2 = coeff.T
+
+    
+    return A, Ae, data_fit
+
+
+
+
 #x0 = [1, 10, 2, 3, 5, 2, -3,]
 #x = linspace(-10,10)
 #y = 2*gauss(x0,x)+1
