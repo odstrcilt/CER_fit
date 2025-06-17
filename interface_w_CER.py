@@ -36,7 +36,7 @@ from IPython import embed
 import pickle, socket
 import numpy as np
 import ctypes
-from MDSplus import *
+#from MDSplus import *
 import scipy.io
 
 #shotnumber = int(sys.argv[1])
@@ -44,11 +44,9 @@ import scipy.io
 from IPython import embed
 
 host_name = socket.gethostname()
-if host_name.find('iris') >= 0:
-    host = 'iris'
-    library_loc = '/fusion/projects/codes/cer/acq_in_c/cerview/cerview_external64.so'
-else:
-    raise RuntimeError('Need to be running on iris or venus where cerview library is available!!')
+
+library_loc = '/fusion/projects/codes/cer/acq_in_c/cerview/cerview_external64.so'
+
 
 try:
     cer_lib = ctypes.cdll.LoadLibrary(library_loc)
