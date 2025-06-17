@@ -10,12 +10,13 @@ try:
     import load_spectrum  
     
 except:
-    raise
+  
     print("""Try first:
 module purge
 module load omfit
 module load ceromfit
 """)
+    raise
     exit()
     
 
