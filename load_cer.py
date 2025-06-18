@@ -187,7 +187,7 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
     spectra = load_spectrum.remove_spikes(spectra)
      
     #time indexes of ative beam 'ts' and times when beams was off for background substraction 'tssub' for 30L and 30R
-    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, '30L')
+    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, '30L', 5000)
 
     #NBI power at these times
     pownbi = beams('30L',t_start,dt) + beams('30R',t_start,dt)
@@ -438,8 +438,8 @@ class CER_interactive:
         vmax = np.percentile(abs(resid),99)
         ax_r3.pcolormesh(select_time,select_wav,resid.T ,cmap='seismic',vmin=-vmax,vmax=vmax )
         ax_r3.set_ylabel('Difference')
-        ax_r3.set_ylabel('Time [s]')
-        ax_left.set_ylabel('Time [s]')
+        ax_r3.set_xlabel('Time [s]')
+        ax_left.set_xlabel('Time [s]')
         
                       
         self.add_exp_fit(ax_left, select_time,A, Ae)

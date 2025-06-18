@@ -563,7 +563,7 @@ def get_beams(shot, fast_data = True, load_beams = ['30L','33L', '30R','33R',]):
     return beams_power
 
 
-def get_tssub(beams, t_start, dt, beam):
+def get_tssub(beams, t_start, dt, beam, ts_range = 20):
     """
     Get wavelength vector get_tssub
  
@@ -594,7 +594,7 @@ def get_tssub(beams, t_start, dt, beam):
  
     tssub = []
     #maximum distance to find the background subtraction timeslices
-    ts_range = 20
+    
     
     ts  = where(beam_on)[0]
 
