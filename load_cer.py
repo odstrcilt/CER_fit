@@ -56,6 +56,119 @@ if channel is None:
     print('Set CER channel')
     exit(1)
 
+def roman2int(string):
+    val = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
+    string = string.upper()
+    total = 0
+    while string:
+        if len(string) == 1 or val[string[0]] >= val[string[1]]:
+            total += val[string[0]]
+            string = string[1:]
+        else:
+            total += val[string[1]] - val[string[0]]
+            string = string[2:]
+    return total
+
+
+def get_cer_channels_ions(MDSconn):
+
+
+    #load availible editions for CER   
+    imps = []
+    imps_sys = {}
+    imps_flav = {}
+    TDI_lineid = []
+    TDI_lam = []
+    channel = []
+    lengths = []
+   
+    cer_flavours = np.array(['fit','auto','quick'])
+    MDSconn.openTree('IONS', shot)
+    for system in ['tangential','vertical']:
+       
+
+        path = 'CER.CALIBRATION.%s.CHANNEL*'%(system)
+        #load only existing channels
+        nodes = MDSconn.get('getnci("'+path+'","PATH")').data()
+
+        #check if intensity data are availible
+        ampl_len = {}
+        TDI = ['getnci("'+path+':BEAMGEOMETRY","LENGTH")']
+        for analysis_type in cer_flavours:
+            path = 'CER.CER%s.%s.CHANNEL*'%(analysis_type,system)
+            TDI.append('getnci("'+path+':INTENSITY","LENGTH")')
+            
+        lengths +=  [MDSconn.get('['+','.join(TDI)+']').data()]
+        
+    
+
+        for node, l in zip(nodes, lengths[-1][0]):
+            if l > 0:
+                if not isinstance(node,str):
+                    node = node.decode()
+                channel.append(system[0]+node.split('.')[-1][7:])
+                TDI_lineid += [node+':LINEID']
+                TDI_lam += [node+':WAVELENGTH']
+                
+    
+    #fast fetch of MDS+ data
+    _line_id = MDSconn.get('['+','.join(TDI_lineid)+']').data()
+    
+    lengths = np.hstack(lengths)
+    fitted_ch_flavours = lengths[1:,lengths[0] > 0] > 0
+    
+    #lam = MDSconn.get('['+','.join(TDI_lam)+']').data()
+    #for ch, l, i in zip(channel, lam, _line_id):
+       #print(ch,i,  l)
+
+    MDSconn.closeTree('IONS', shot)
+    
+    ch_system = np.array([ch[0] for ch in channel])
+    
+    
+    line_id = []
+    uids = np.unique(_line_id)
+    for l in uids:                
+        if not isinstance(l,str):
+            l = l.split(b'\x00')[0] #sometimes are names quite wierd
+            l = l.decode()
+        line_id.append(l.strip())
+        
+    for l,ll in zip(line_id, uids):
+        try:
+            import re
+            tmp = re.search('([A-Z][a-z]*) *([A-Z]*) *([0-9]*[a-z]*-[0-9]*[a-z]*)', l)
+            imp, Z = tmp.group(1), tmp.group(2)
+            imps.append(imp+str(roman2int(Z)))
+        except:
+            imps.append('XX')
+        imps_sys[imps[-1]] = np.unique(ch_system[_line_id == ll]).tolist()
+        imps_flav[imps[-1]] = cer_flavours[np.any(fitted_ch_flavours[:,_line_id == ll],1)].tolist()
+  
+    if 'C6' in imps_flav:
+        imps_flav['C6'].append('real')
+    
+    #if there are other impurities than carbon, print their channels
+    if len(line_id) > 1:
+        print('------------ CER setup ---------')
+        for imp, lid, uid in zip(imps,  line_id, uids):
+            print(imp+': ',end = '')
+            ch_prew = None
+            ch_first = None
+            for ch, _id in zip(channel, _line_id):
+                if _id == uid:
+                    if ch_prew is None:
+                        print(ch, end = '')
+                        ch_first = ch
+                    elif int(ch_prew[1:])!=  int(ch[1:])-1:
+                        if ch_first != ch_prew:
+                            print('-'+ch_prew, end = '')                            
+                        print(', '+ch, end = '')          
+                        ch_first = ch
+                    ch_prew = ch
+            print('-'+ch_prew)
+        print('--------------------------------')
+
 
 
 def load_cer_spectra(shot, channel, average_over_beam_blip):
@@ -114,9 +227,16 @@ class CER_interactive:
         print('Start')
         self.time, self.lam, self.spectrum, self.bg_spectrum = load_cer_spectra(shot, channel, average_over_beam_blip)
         connection = MDSplus.Connection('atlas.gat.com')
-        
+        try:
+            get_cer_channels_ions(connection)
+        except:
+            raise
+            
+            
         connection.openTree('IONS', shot)
+        
 
+            
         self.lineid = connection.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL{channel[1:]}:LINEID ').value
 
         
@@ -229,7 +349,7 @@ class CER_interactive:
             p0 = pos ,0.,0.5
 
             popt,pcov = curve_fit(fun, x, y,jac='cs', p0=p0,sigma=e,
-                                bounds=((0, -np.inf,0),(np.inf, np.inf, 1)),
+                                bounds=((0, -np.inf,0),(np.inf, np.inf, 5)),
                                 x_scale=(pos,pos,0.1))
             
             chi2 = sum(((fun(x,*popt)-y)/e)**2)/len(x)
