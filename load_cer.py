@@ -27,6 +27,7 @@ from matplotlib.widgets import RectangleSelector,SpanSelector, MultiCursor
 from scipy.optimize import least_squares,curve_fit
 from IPython import embed
 import os, socket, sys
+from functools import partial
 
  
 hostname=socket.gethostname()
@@ -38,7 +39,7 @@ parser = argparse.ArgumentParser( usage='Plot and fit SPRED data')
 
 parser.add_argument('--shot', metavar='S',type=int, help='shot number')
 parser.add_argument('--channel', metavar='C',type=str, help='CER channel')
-parser.add_argument('--add_offset',action='store_true', help='Add free offset to exponantial fit', default=False)
+ 
 parser.add_argument('--blip_avg',action='store_true', help='Average CER data over the beamblip', default=False)
 
 
@@ -218,12 +219,13 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
 
 class CER_interactive:
   
-    def __init__(self,shot, channel, add_offset, average_over_beam_blip):
+    def __init__(self,shot, channel, average_over_beam_blip):
 
 
         self.shot = shot
         self.channel = channel
-        self.add_offset = add_offset
+      
+        self.background_data = None
         print('Start')
         self.time, self.lam, self.spectrum, self.bg_spectrum = load_cer_spectra(shot, channel, average_over_beam_blip)
         connection = MDSplus.Connection('atlas.gat.com')
@@ -268,10 +270,12 @@ class CER_interactive:
         self.ax.set_ylabel('time [s]')
         self.ax.set_ylim(self.time[0],self.time[-1])
         self.ax.set_xlim(self.lam.min(),self.lam.max())
+        self.ax.set_title('Select background by right mouse button (optional), and fit by left button')
 
         
         
         props = dict(facecolor='red', edgecolor = 'red',alpha=0.5, fill=True,zorder=99)
+  
         select_kwg = dict(#drawtype='box', 
                           useblit=True,
                         button=[1],  # don't use middle button
@@ -279,13 +283,28 @@ class CER_interactive:
                         spancoords='pixels', interactive=True)
         
         self.select = RectangleSelector(self.ax, self.line_select_callback, **select_kwg)
+        
 
+        props_bckg = dict(facecolor='blue', edgecolor = 'red',alpha=0.5, fill=True,zorder=99)
+        
+        select_kwg_bckg = dict(#drawtype='box', 
+                          useblit=True,
+                        button=[3],  # don't use middle button
+                        minspanx=5, minspany=5,  props= props_bckg ,
+                        spancoords='pixels', interactive=True)
+                        
+                        
+        self.select_bckg = RectangleSelector(self.ax, self.line_select_callback, **select_kwg_bckg)
+
+        
         
         self.fig.tight_layout()
 
     def plot_spectra(self):
+      
         
-        self.scale =  np.percentile(self.spectrum, 99)
+        active_spectra =  self.spectrum - self.bg_spectrum
+        self.scale =  np.percentile(active_spectra.max(1), 95)
 
         dt = np.mean(np.diff(self.time))
         dl = np.mean(np.diff(self.lam))
@@ -295,9 +314,9 @@ class CER_interactive:
         #NOTE time is defined at the middle of the frame exposure
         
         img = self.ax.pcolorfast(np.r_[self.lam-dl/2,self.lam[-1]+dl/2],
-         np.r_[self.time-dt,self.time[-1]],self.spectrum - self.bg_spectrum,
+         np.r_[self.time-dt,self.time[-1]],active_spectra,
          vmax=self.scale,**img_kwars)
-        
+      
        
         [self.ax.axhline(lbo, c='b', lw=.5) for lbo in self.lbo_times]
  
@@ -309,12 +328,9 @@ class CER_interactive:
 
 
     def line_select_callback(self,eclick, erelease):
-        if eclick.button != 1:
-            return 
-  
-        #make sure that this event is "unique", due to some bug in matplolib
-        try:
-            if self.click_event is None or self.click_event.xdata!=eclick.xdata :
+        if self.click_event is None or self.click_event.xdata!=eclick.xdata :
+            if eclick.button in [1,3]:
+ 
                 self.click_event = eclick
                 # Internal callback for RectangleSelector
 
@@ -322,13 +338,9 @@ class CER_interactive:
                 wmin, wmax = sorted([eclick.xdata, erelease.xdata])
                 if tmin != tmax and wmin != wmax:
                     self.fit_cer_spectra(tmin, tmax, wmin, wmax)
-               
-                   
-        except:
-            raise
-        finally:
-            self.select.set_visible(False)
-
+           
+                
+            
        
     def add_exp_fit(self, ax, time, sig, err):
         
@@ -337,9 +349,11 @@ class CER_interactive:
 
         result= ax.text(0.5,0.95,'',transform=ax.transAxes,zorder=100, backgroundcolor='w')
 
-        fun = lambda x,a,b,t: a*np.exp(-x/t)+b*self.add_offset
+        
 
-        def onselect(xmin, xmax):
+        def onselect(xmin, xmax, add_offset=False):
+        
+            fun = lambda x,a,b,t: a*np.exp(-x/t)+b*add_offset
             indmin, indmax = time.searchsorted((xmin, xmax))
             x = time[indmin:indmax]-time[indmin]
             y = sig[indmin:indmax]
@@ -357,22 +371,32 @@ class CER_interactive:
             x_fit = np.linspace(xmin, xmax,1000)-time[indmin]
             y_fit = fun(x_fit,*popt)
             fit.set_data(x_fit+time[indmin], y_fit)
-            if self.add_offset:
+            if add_offset:
                 plt_offset.set_data(x_fit+time[indmin], y_fit*0+popt[1])
+                plt_offset.set_visible(True)
+            else:
+                plt_offset.set_visible(False)
+                
             #uncertainty corrected for chi2/n!=1
             fit_err = np.sqrt(np.diag(pcov)* chi2)
-            result.set_text(r'$\tau_p$ = %.1f+/-%.1f ms'%(popt[2]*1e3, fit_err[2]*1e3))
+            result.set_text(r'$\tau_p$ = %.0f+/-%.0f ms'%(popt[2]*1e3, fit_err[2]*1e3))
             ax.figure.canvas.draw()
 
 
         # set useblit True on gtkagg for enhanced performance
         self.fit_span = SpanSelector(ax, onselect, 'horizontal', useblit=True,
-                            props=dict(alpha=0.5, facecolor='red'))
+                            props=dict(alpha=0.5, facecolor='red'), button = 1)
+                            
+        self.fit_span_offset = SpanSelector(ax, partial(onselect, add_offset=True),
+                             'horizontal', useblit=True,
+                            props=dict(alpha=0.5, facecolor='blue'), button = 3)
+                            
+                                           
 
 
         # Callback function
     def fit_cer_spectra(self, tmin, tmax, wmin, wmax):
-        print(f"Selected time range: {tmin:.2f} - {tmax:.2f}")
+        print(f"Selected time range: {tmin:.1f} - {tmax:.1f}")
         print(f"Selected wavelength range: {wmin:.2f} - {wmax:.2f}")
 
         wind = (self.lam < wmax)&(self.lam > wmin)
@@ -382,18 +406,29 @@ class CER_interactive:
         select_bg_spectra = self.bg_spectrum[tind][:,wind]
         select_time = self.time[tind]
         select_wav = self.lam[wind]
-        
-          
-                                                                          
+                                                                  
         A, Ae, data_fit =  cer_fit.fit_fixed_shape_gauss(select_wav, select_spectra, 
         select_bg_spectra)
-                                                                         
- 
-
+       
         active_spectrum = select_spectra - select_bg_spectra
         
+        if self.click_event.button == 3:
+            self.background_data = (select_wav,  data_fit.mean(0), A.mean(0),)
+        else:
+            self.plot_spectra_fit( A, Ae, data_fit, active_spectrum, select_wav, select_time )
         
-        import matplotlib.gridspec as gridspec
+        
+    def plot_spectra_fit(self,  A, Ae, data_fit, active_spectrum, wav, time):
+        
+        #remove background if it was selected by the user
+        if self.background_data is not None:
+            A = A - self.background_data[2]
+            offset = np.interp(wav, self.background_data[0], self.background_data[1])
+            data_fit = data_fit - offset
+            active_spectrum = active_spectrum - offset
+        
+        #plot  selected spectral region and the amplitude
+        import matplotlib.gridspec as gridspec  
 
         fig = plt.figure(figsize=(10, 6), num=f'Line fit')
         fig.clf()
@@ -416,33 +451,33 @@ class CER_interactive:
         for ax in [ax_r1, ax_r2, ax_r3]:
             ax.tick_params(labelleft=False)
             
-        ax_left.set_title('Drag to fit by exponential')
+        ax_left.set_title('Drag to fit by exponential (right mouse button to add offset)')
 
 
         #f,ax = plt.subplots(4,1, sharex=True)
         ax_left.set_yscale('log')
              
         ax_left.set_ylim((A).max()/100, (A).max()*1.5)
-        ax_left.errorbar(select_time, A, Ae)
+        ax_left.errorbar(time, A, Ae)
         ax_left.set_ylabel('Amplitude')
 
         offset = np.percentile(active_spectrum,5,axis=1)
         vmax=np.percentile(active_spectrum,99)
-        ax_r1.pcolormesh(select_time,select_wav, active_spectrum.T-offset ,vmin=0,vmax=vmax )
+        ax_r1.pcolormesh(time,wav, active_spectrum.T-offset ,vmin=0,vmax=vmax )
         ax_r1.set_ylabel('Active spectrum')
         
-        ax_r2.pcolormesh(select_time,select_wav, data_fit.T-offset ,vmin=0,vmax=vmax  )
+        ax_r2.pcolormesh(time,wav, data_fit.T-offset ,vmin=0,vmax=vmax  )
         ax_r2.set_ylabel('Fitted spectrum')
         
         resid = active_spectrum-data_fit
         vmax = np.percentile(abs(resid),99)
-        ax_r3.pcolormesh(select_time,select_wav,resid.T ,cmap='seismic',vmin=-vmax,vmax=vmax )
+        ax_r3.pcolormesh(time, wav,resid.T ,cmap='seismic',vmin=-vmax,vmax=vmax )
         ax_r3.set_ylabel('Difference')
         ax_r3.set_xlabel('Time [s]')
         ax_left.set_xlabel('Time [s]')
         
                       
-        self.add_exp_fit(ax_left, select_time,A, Ae)
+        self.add_exp_fit(ax_left, time,A, Ae)
                
         
         all_ax =  [ax_left, ax_r1, ax_r2, ax_r3]
@@ -505,6 +540,8 @@ class CER_interactive:
             print( 'Fitting was unsuccesful')
             return
         
+        
+        
         f = plt.figure(num='Line fit', figsize=(10,5))
         f.clf()
         
@@ -526,6 +563,8 @@ class CER_interactive:
         ax.set_title('lam0 = %.3f nm  FWHM = %.3f'%(x0,2.355*abs(s)))
         ax.set_xlabel('time [s]')
         
+        
+     
         self.add_exp_fit(ax, time_slice, coeff[:,0], err)
 
         
@@ -558,7 +597,7 @@ class CER_interactive:
 
 
 
-spred_plot = CER_interactive(shot, channel, args.add_offset, args.blip_avg)
+spred_plot = CER_interactive(shot, channel,  args.blip_avg)
 
 
  
