@@ -41,6 +41,7 @@ parser.add_argument('--shot', metavar='S',type=int, help='shot number')
 parser.add_argument('--channel', metavar='C',type=str, help='CER channel')
  
 parser.add_argument('--blip_avg',action='store_true', help='Average CER data over the beamblip', default=False)
+parser.add_argument('--downsample',type=int, help='Redice time resolution N times', default=1)
 
 
 
@@ -228,6 +229,13 @@ class CER_interactive:
         self.background_data = None
         print('Start')
         self.time, self.lam, self.spectrum, self.bg_spectrum = load_cer_spectra(shot, channel, average_over_beam_blip)
+        
+        if args.downsample > 1:
+            n = len(self.time)
+            self.time = self.time[:n//args.downsample*args.downsample].reshape(-1, args.downsample).mean(1)
+            self.spectrum = self.spectrum[:n//args.downsample*args.downsample].reshape(-1, args.downsample, self.spectrum.shape[1]).mean(1)
+            self.bg_spectrum = self.bg_spectrum[:n//args.downsample*args.downsample].reshape(-1, args.downsample, self.bg_spectrum.shape[1]).mean(1)
+       
         connection = MDSplus.Connection('atlas.gat.com')
         try:
             get_cer_channels_ions(connection)
@@ -268,7 +276,8 @@ class CER_interactive:
         self.ax.set_xlabel(r'$\lambda$ [nm]')        
                 
         self.ax.set_ylabel('time [s]')
-        self.ax.set_ylim(self.time[0],self.time[-1])
+        # self.ax.set_ylim(self.time[0],self.time[-1])
+        self.ax.set_ylim(self.time[0], 6)
         self.ax.set_xlim(self.lam.min(),self.lam.max())
         self.ax.set_title('Select background by right mouse button (optional), and fit by left button')
 
