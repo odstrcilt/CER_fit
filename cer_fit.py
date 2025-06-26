@@ -309,7 +309,7 @@ def fast_recursive_fit(data, bckg,wav_vec,p0=None,ph_per_count=1,readout_noise=0
 def fit_fixed_shape_gauss(wav_vec, spectra, bg_spectra):
 
     active = spectra-bg_spectra
-    wav_vec = wav_vec
+ 
     bg_spectra = bg_spectra
  
 
@@ -334,9 +334,14 @@ def fit_fixed_shape_gauss(wav_vec, spectra, bg_spectra):
         return r
         
    # initial guess for gaussian width is one thord of the selected region
-    width0 = (wav_vec[-1]-wav_vec[0]) / 3
+    width_max = (wav_vec.max()-wav_vec.min())
+    width0 =  width_max/ 3
     wmid0 =  wav_vec[np.argmax(active.mean(0))]
-    out = least_squares(cost_fun, (wmid0, width0),args=(wav_vec, active))
+
+ 
+    out = least_squares(cost_fun, (wmid0, width0),
+                bounds = [[wav_vec.min(), width_max/10, ], [wav_vec.max(), width_max]],
+                args=(wav_vec, active))
                 #hardcoded maximal and mininal line width 
     
     coeff,data_fit,Ae = cost_fun(out.x, wav_vec, active,return_results=True)

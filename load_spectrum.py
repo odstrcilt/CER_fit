@@ -732,7 +732,7 @@ def blip_average(spectrum, tvec,dt, beam_pow,skip_first = 0, passive=False):
              bckg.append((bckg1.mean(0)+bckg2.mean(0))/2)
              data.append(sig.mean(0))
              pow_avg.append(beam_pow[start[i+1]:end[i+1]].mean())
- 
+     
     tvec_ = hstack(tvec_)
     stime = hstack(stime)
     data = vstack(data)

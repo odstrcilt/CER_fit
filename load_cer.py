@@ -243,10 +243,12 @@ class CER_interactive:
         self.time, self.lam, self.spectrum, self.bg_spectrum = load_cer_spectra(shot, channel, average_over_beam_blip)
         
         if args.downsample > 1:
+        
             n = len(self.time)
-            self.time = self.time[:n//args.downsample*args.downsample].reshape(-1, args.downsample).mean(1)
-            self.spectrum = self.spectrum[:n//args.downsample*args.downsample].reshape(-1, args.downsample, self.spectrum.shape[1]).mean(1)
-            self.bg_spectrum = self.bg_spectrum[:n//args.downsample*args.downsample].reshape(-1, args.downsample, self.bg_spectrum.shape[1]).mean(1)
+            d = args.downsample
+            self.time = self.time[:n//d*d].reshape(-1, args.downsample).mean(1)
+            self.spectrum = self.spectrum[:n//ad*d].reshape(-1, args.downsample, self.spectrum.shape[1]).mean(1)
+            self.bg_spectrum = self.bg_spectrum[:n//d*d].reshape(-1, args.downsample, self.bg_spectrum.shape[1]).mean(1)
        
         connection = MDSplus.Connection('atlas.gat.com')
         try:
