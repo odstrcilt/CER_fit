@@ -113,8 +113,12 @@ def get_cer_channels_ions(MDSconn):
                 
     
     #fast fetch of MDS+ data
-    _line_id = MDSconn.get('['+','.join(TDI_lineid)+']').data()
-    
+    try:
+        _line_id = MDSconn.get('['+','.join(TDI_lineid)+']').data()
+    except:
+        raise Exception('No CER data?')
+        
+        
     lengths = np.hstack(lengths)
     fitted_ch_flavours = lengths[1:,lengths[0] > 0] > 0
     
@@ -150,25 +154,25 @@ def get_cer_channels_ions(MDSconn):
         imps_flav['C6'].append('real')
     
     #if there are other impurities than carbon, print their channels
-    if len(line_id) > 1:
-        print('------------ CER setup ---------')
-        for imp, lid, uid in zip(imps,  line_id, uids):
-            print(imp+': ',end = '')
-            ch_prew = None
-            ch_first = None
-            for ch, _id in zip(channel, _line_id):
-                if _id == uid:
-                    if ch_prew is None:
-                        print(ch, end = '')
-                        ch_first = ch
-                    elif int(ch_prew[1:])!=  int(ch[1:])-1:
-                        if ch_first != ch_prew:
-                            print('-'+ch_prew, end = '')                            
-                        print(', '+ch, end = '')          
-                        ch_first = ch
-                    ch_prew = ch
-            print('-'+ch_prew)
-        print('--------------------------------')
+  
+    print('------------ CER setup ---------')
+    for imp, lid, uid in zip(imps,  line_id, uids):
+        print(imp+': ',end = '')
+        ch_prew = None
+        ch_first = None
+        for ch, _id in zip(channel, _line_id):
+            if _id == uid:
+                if ch_prew is None:
+                    print(ch, end = '')
+                    ch_first = ch
+                elif int(ch_prew[1:])!=  int(ch[1:])-1:
+                    if ch_first != ch_prew:
+                        print('-'+ch_prew, end = '')                            
+                    print(', '+ch, end = '')          
+                    ch_first = ch
+                ch_prew = ch
+        print('-'+ch_prew)
+    print('--------------------------------')
 
 
 
@@ -200,20 +204,28 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
     else:
         time = t_start[ts]
         #this will aveverage passive spectra over the whole notch region 
-        time_passive,_, spectra_passive, _, _= load_spectrum.blip_average(spectra, t_start, dt, pownbi, passive=True)
-        from scipy.interpolate import interp1d
-        bg_spectra = interp1d(time_passive, spectra_passive, axis=0)(np.clip(time, time_passive[0], time_passive[-1]))
-        #bg_spectra = spectra[tssub]
+        try:
+            time_passive,_, spectra_passive, _, pow_avg_bg = load_spectrum.blip_average(spectra, t_start, dt, pownbi, passive=True)
+            from scipy.interpolate import interp1d
+            bg_spectra = interp1d(time_passive, spectra_passive, axis=0)(np.clip(time, time_passive[0], time_passive[-1]))
+            pow_avg_bg = interp1d(time_passive, pow_avg_bg)(np.clip(time, time_passive[0], time_passive[-1]))
+        except:
+            pow_avg_bg = pownbi[tssub]
+            bg_spectra = spectra[tssub]
+
         spectra = spectra[ts]
-        pow_avg = pownbi[ts] - pownbi[tssub]         
+        pow_avg = pownbi[ts] - pow_avg_bg
+         
    
+    
+     
     
     #correction for varying NBI power
     pow_avg /= pow_avg.mean()
     bg_spectra/=pow_avg[:,None]
     spectra/=pow_avg[:,None]
 
-
+    #embed()
 
     return time, wav_vec, spectra, bg_spectra
 
@@ -406,27 +418,34 @@ class CER_interactive:
         select_bg_spectra = self.bg_spectrum[tind][:,wind]
         select_time = self.time[tind]
         select_wav = self.lam[wind]
+        
+        #save background or substratct, based on the used mouse button
+        if self.click_event.button == 3:
+            A, Ae, data_fit =  cer_fit.fit_fixed_shape_gauss(select_wav, select_spectra, 
+            select_bg_spectra)
+            self.background_data = (select_wav,  data_fit.mean(0))
+            return 
+            
+        elif  self.background_data is not None:
+            offset = np.interp(select_wav, *self.background_data)
+            select_bg_spectra = select_bg_spectra + offset
+          
                                                                   
         A, Ae, data_fit =  cer_fit.fit_fixed_shape_gauss(select_wav, select_spectra, 
-        select_bg_spectra)
+            select_bg_spectra)
        
         active_spectrum = select_spectra - select_bg_spectra
         
         if self.click_event.button == 3:
+            
             self.background_data = (select_wav,  data_fit.mean(0), A.mean(0),)
+            print(A )
         else:
             self.plot_spectra_fit( A, Ae, data_fit, active_spectrum, select_wav, select_time )
         
         
     def plot_spectra_fit(self,  A, Ae, data_fit, active_spectrum, wav, time):
-        
-        #remove background if it was selected by the user
-        if self.background_data is not None:
-            A = A - self.background_data[2]
-            offset = np.interp(wav, self.background_data[0], self.background_data[1])
-            data_fit = data_fit - offset
-            active_spectrum = active_spectrum - offset
-        
+   
         #plot  selected spectral region and the amplitude
         import matplotlib.gridspec as gridspec  
 
