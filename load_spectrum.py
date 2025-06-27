@@ -522,7 +522,7 @@ def load_all_channels(shot):
 
 
 
-def get_beams(shot, fast_data = True, load_beams = ['30L','33L', '30R','33R',]):
+def get_beams(shot, fast_data = True, load_beams = ['30L','33L', '30R','33R']):
     """
     Get a dictionary of functions that returns beam power integrated over the integration time of CCD
  
@@ -537,6 +537,11 @@ def get_beams(shot, fast_data = True, load_beams = ['30L','33L', '30R','33R',]):
         
     
     """
+    
+    if shot < 177400:
+        load_beams += ['21L','21R' ]
+        
+        
     MDSconn.openTree('NB',  shot)  
 
  

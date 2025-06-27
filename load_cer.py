@@ -38,10 +38,10 @@ import argparse
 parser = argparse.ArgumentParser( usage='Plot and fit SPRED data')
 
 parser.add_argument('--shot', metavar='S',type=int, help='shot number')
-parser.add_argument('--channel', metavar='C',type=str, help='CER channel')
+parser.add_argument('--channel', metavar='C',type=str, help='CER channel', default=None)
  
 parser.add_argument('--blip_avg',action='store_true', help='Average CER data over the beamblip', default=False)
-parser.add_argument('--downsample',type=int, help='Redice time resolution N times', default=1)
+parser.add_argument('--downsample',type=int, help='Reduce time resolution N times', default=1)
 
 
 
@@ -54,10 +54,7 @@ if shot is None:
     print('Set shot number')
     exit(1)
 
-if channel is None:
-    print('Set CER channel')
-    exit(1)
-
+ 
 def roman2int(string):
     val = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
     string = string.upper()
@@ -73,8 +70,7 @@ def roman2int(string):
 
 
 def get_cer_channels_ions(MDSconn):
-
-
+      
     #load availible editions for CER   
     imps = []
     imps_sys = {}
@@ -111,7 +107,13 @@ def get_cer_channels_ions(MDSconn):
                 channel.append(system[0]+node.split('.')[-1][7:])
                 TDI_lineid += [node+':LINEID']
                 TDI_lam += [node+':WAVELENGTH']
+                try:
+                    _line_id = MDSconn.get(node+':WAVELENGTH').data()
+                except:
+                    print(node)
                 
+                        
+
     
     #fast fetch of MDS+ data
     try:
@@ -178,10 +180,14 @@ def get_cer_channels_ions(MDSconn):
 
 
 def load_cer_spectra(shot, channel, average_over_beam_blip):
-
-    if not (channel in ['T%.2d'%i for i in np.r_[1:8, 17:23, 25:29]] or channel in ['M%.2d'%i for i in np.r_[1:9]]) :
-        raise Exception('Only channels from 30L and 30R beams are supported!')
     
+    beam = '30'
+    if not (channel in ['T%.2d'%i for i in np.r_[1:8, 17:23, 25:29]] or channel in ['M%.2d'%i for i in np.r_[1:9]]) :
+        beam = '33'
+        
+    if channel in  ['T%.2d'%i for i in np.r_[25:37]] and shot < 177400: 
+        beam = '21'
+           
     beams = load_spectrum.get_beams(shot)
     wavelength, t_start, dt,raw_gain, spectra, pe, readout_noise  = load_spectrum.load_chord(shot, channel)
     print('Fetched')
@@ -193,10 +199,10 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
     spectra = load_spectrum.remove_spikes(spectra)
      
     #time indexes of ative beam 'ts' and times when beams was off for background substraction 'tssub' for 30L and 30R
-    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, '30L', 5000)
+    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 5000)
 
     #NBI power at these times
-    pownbi = beams('30L',t_start,dt) + beams('30R',t_start,dt)
+    pownbi = beams(beam+'L',t_start,dt) + beams(beam+'R',t_start,dt)
     
 
     if average_over_beam_blip:
@@ -237,6 +243,19 @@ class CER_interactive:
 
         self.shot = shot
         self.channel = channel
+        
+        
+        connection = MDSplus.Connection('atlas.gat.com')
+        
+        try:
+            get_cer_channels_ions(connection)
+        except:
+            print('Channel detection faied, try T01 or T17')
+            
+        if  channel is None:
+            print('Please specify the CER channels')
+            exit()
+            
       
         self.background_data = None
         print('Start')
@@ -250,12 +269,7 @@ class CER_interactive:
             self.spectrum = self.spectrum[:n//ad*d].reshape(-1, args.downsample, self.spectrum.shape[1]).mean(1)
             self.bg_spectrum = self.bg_spectrum[:n//d*d].reshape(-1, args.downsample, self.bg_spectrum.shape[1]).mean(1)
        
-        connection = MDSplus.Connection('atlas.gat.com')
-        try:
-            get_cer_channels_ions(connection)
-        except:
-            raise
-            
+
             
         connection.openTree('IONS', shot)
         
