@@ -422,7 +422,7 @@ class CER_interactive:
         print(f"Selected time range: {tmin:.1f} - {tmax:.1f}")
         print(f"Selected wavelength range: {wmin:.2f} - {wmax:.2f}")
 
-        wind = (self.lam < wmax)&(self.lam > wmin)
+        wind = (self.lam  < wmax)&(self.lam  > wmin)
         tind = (self.time > tmin)&(self.time < tmax)
         
         select_spectra = self.spectrum[tind][:,wind]
@@ -431,28 +431,28 @@ class CER_interactive:
         select_wav = self.lam[wind]
         
         #save background or substratct, based on the used mouse button
+         
         if self.click_event.button == 3:
             A, Ae, data_fit =  cer_fit.fit_fixed_shape_gauss(select_wav, select_spectra, 
             select_bg_spectra)
-            self.background_data = (select_wav,  data_fit.mean(0))
+            isort = np.argsort(select_wav)
+            self.background_data = (select_wav[isort],  data_fit.mean(0)[isort])
             return 
             
-        elif  self.background_data is not None:
+        if self.background_data is not None:
+          
             offset = np.interp(select_wav, *self.background_data)
+           
             select_bg_spectra = select_bg_spectra + offset
           
-                                                                  
+                                                  
         A, Ae, data_fit =  cer_fit.fit_fixed_shape_gauss(select_wav, select_spectra, 
             select_bg_spectra)
-       
+        
+      
         active_spectrum = select_spectra - select_bg_spectra
         
-        if self.click_event.button == 3:
-            
-            self.background_data = (select_wav,  data_fit.mean(0), A.mean(0),)
-            print(A )
-        else:
-            self.plot_spectra_fit( A, Ae, data_fit, active_spectrum, select_wav, select_time )
+        self.plot_spectra_fit( A, Ae, data_fit, active_spectrum, select_wav, select_time )
         
         
     def plot_spectra_fit(self,  A, Ae, data_fit, active_spectrum, wav, time):

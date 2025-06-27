@@ -310,9 +310,7 @@ def fit_fixed_shape_gauss(wav_vec, spectra, bg_spectra):
 
     active = spectra-bg_spectra
  
-    bg_spectra = bg_spectra
  
-
     background = bg_spectra.mean(0)
 
  
