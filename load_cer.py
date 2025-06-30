@@ -97,8 +97,8 @@ def get_cer_channels_ions(MDSconn):
             TDI.append('getnci("'+path+':INTENSITY","LENGTH")')
             
         lengths +=  [MDSconn.get('['+','.join(TDI)+']').data()]
-        
-    
+         
+        w_lengths +=  [MDSconn.get('['+','.join(TDI)+']').data()]
 
         for node, l in zip(nodes, lengths[-1][0]):
             if l > 0:
@@ -107,14 +107,8 @@ def get_cer_channels_ions(MDSconn):
                 channel.append(system[0]+node.split('.')[-1][7:])
                 TDI_lineid += [node+':LINEID']
                 TDI_lam += [node+':WAVELENGTH']
-                try:
-                    _line_id = MDSconn.get(node+':WAVELENGTH').data()
-                except:
-                    print(node)
-                
-                        
-
-    
+            
+     
     #fast fetch of MDS+ data
     try:
         _line_id = MDSconn.get('['+','.join(TDI_lineid)+']').data()
@@ -250,7 +244,7 @@ class CER_interactive:
         try:
             get_cer_channels_ions(connection)
         except:
-            print('Channel detection faied, try T01 or T17')
+            print('Channel detection failed, try T01 or T17')
             
         if  channel is None:
             print('Please specify the CER channels')
