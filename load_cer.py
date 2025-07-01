@@ -98,7 +98,7 @@ def get_cer_channels_ions(MDSconn):
             
         lengths +=  [MDSconn.get('['+','.join(TDI)+']').data()]
          
-        w_lengths +=  [MDSconn.get('['+','.join(TDI)+']').data()]
+        #w_lengths +=  [MDSconn.get('['+','.join(TDI)+']').data()]
 
         for node, l in zip(nodes, lengths[-1][0]):
             if l > 0:
@@ -244,6 +244,7 @@ class CER_interactive:
         try:
             get_cer_channels_ions(connection)
         except:
+            
             print('Channel detection failed, try T01 or T17')
             
         if  channel is None:
@@ -259,9 +260,9 @@ class CER_interactive:
         
             n = len(self.time)
             d = args.downsample
-            self.time = self.time[:n//d*d].reshape(-1, args.downsample).mean(1)
-            self.spectrum = self.spectrum[:n//ad*d].reshape(-1, args.downsample, self.spectrum.shape[1]).mean(1)
-            self.bg_spectrum = self.bg_spectrum[:n//d*d].reshape(-1, args.downsample, self.bg_spectrum.shape[1]).mean(1)
+            self.time = self.time[:n//d*d].reshape(-1, d).mean(1)
+            self.spectrum = self.spectrum[:n//d*d].reshape(-1, d, self.spectrum.shape[1]).mean(1)
+            self.bg_spectrum = self.bg_spectrum[:n//d*d].reshape(-1, d, self.bg_spectrum.shape[1]).mean(1)
        
 
             
