@@ -176,7 +176,7 @@ def get_cer_channels_ions(MDSconn):
 def load_cer_spectra(shot, channel, average_over_beam_blip):
     
     beam = '30'
-    if not (channel in ['T%.2d'%i for i in np.r_[1:8, 17:23, 25:29]] or channel in ['M%.2d'%i for i in np.r_[1:9]]) :
+    if not (channel in ['T%.2d'%i for i in np.r_[1:8, 17:23, 25:29, 36:57]] or channel in ['M%.2d'%i for i in np.r_[1:9]]) :
         beam = '33'
         
     if channel in  ['T%.2d'%i for i in np.r_[25:37]] and shot < 177400: 
@@ -192,17 +192,30 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
     #remove spikes from gamma radiation
     spectra = load_spectrum.remove_spikes(spectra)
      
-    #time indexes of ative beam 'ts' and times when beams was off for background substraction 'tssub' for 30L and 30R
-    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 5000)
-
     #NBI power at these times
     pownbi = beams(beam+'L',t_start,dt) + beams(beam+'R',t_start,dt)
+
+    #contamination by 330 beams!
+    #correction cannot be used for 190549, because is a bad beam timing. 
+    if channel in  ['T%.2d'%i for i in np.r_[36:57]] and shot > 177400 and shot != 190549: 
+       pownbi_cross = beams('33L', t_start, dt) + beams('33R', t_start, dt)
+       crosstalk = pownbi_cross > 0.5e6
+       spectra = spectra[~crosstalk]
+       t_start = t_start[~crosstalk]
+       pownbi = pownbi[~crosstalk]
+       
+
+       
+    #time indexes of ative beam 'ts' and times when beams was off for background substraction 'tssub' for 30L and 30R
+    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 5000)
     
 
+   
     if average_over_beam_blip:
         time, stime, spectra, bg_spectra, pow_avg  = load_spectrum.blip_average(spectra, t_start, dt, pownbi)
 
     else:
+        
         time = t_start[ts]
         #this will aveverage passive spectra over the whole notch region 
         try:
@@ -210,9 +223,11 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
             from scipy.interpolate import interp1d
             bg_spectra = interp1d(time_passive, spectra_passive, axis=0)(np.clip(time, time_passive[0], time_passive[-1]))
             pow_avg_bg = interp1d(time_passive, pow_avg_bg)(np.clip(time, time_passive[0], time_passive[-1]))
-        except:
+        except Exception as e:
+            print('Issue with background substraction', e)
             pow_avg_bg = pownbi[tssub]
             bg_spectra = spectra[tssub]
+            
 
         spectra = spectra[ts]
         pow_avg = pownbi[ts] - pow_avg_bg
@@ -395,7 +410,7 @@ class CER_interactive:
             p0 = pos ,0.,0.5
 
             popt,pcov = curve_fit(fun, x, y,jac='cs', p0=p0,sigma=e,
-                                bounds=((0, -np.inf,0),(np.inf, np.inf, 5)),
+                                bounds=((0, -np.inf,0),(np.inf, np.inf, 10)),
                                 x_scale=(pos,pos,0.1))
             
             chi2 = sum(((fun(x,*popt)-y)/e)**2)/len(x)
