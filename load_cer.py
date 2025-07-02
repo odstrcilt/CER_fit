@@ -409,11 +409,18 @@ class CER_interactive:
             pos = abs(y.mean())+0.1
             p0 = pos ,0.,0.5
 
-            popt,pcov = curve_fit(fun, x, y,jac='cs', p0=p0,sigma=e,
+            popt,pcov = curve_fit(fun, x, y,jac='cs', p0=p0,sigma=e, absolute_sigma=True,
                                 bounds=((0, -np.inf,0),(np.inf, np.inf, 10)),
                                 x_scale=(pos,pos,0.1))
             
-            chi2 = sum(((fun(x,*popt)-y)/e)**2)/len(x)
+            
+            resid = (fun(x,*popt)-y)/e
+            chi2 = sum(resid**2/len(x))
+           
+            #uncertanty correction for chi/n=1 and correlated errors
+            err_scale = len(x) / (2.0 * np.sum(np.diff(resid > 0))) * np.sqrt(chi2)
+            fit_err = np.sqrt(np.diag(pcov)) * err_scale
+            
             print( 'chi2: %.2f'% chi2 )
             x_fit = np.linspace(xmin, xmax,1000)-time[indmin]
             y_fit = fun(x_fit,*popt)
@@ -424,8 +431,7 @@ class CER_interactive:
             else:
                 plt_offset.set_visible(False)
                 
-            #uncertainty corrected for chi2/n!=1
-            fit_err = np.sqrt(np.diag(pcov)* chi2)
+   
             result.set_text(r'$\tau_p$ = %.0f+/-%.0f ms'%(popt[2]*1e3, fit_err[2]*1e3))
             ax.figure.canvas.draw()
 
