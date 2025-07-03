@@ -15,7 +15,7 @@ from matplotlib.widgets import MultiCursor
 import os 
 mdsserver = 'atlas.gat.com'
 MDSconn = MDSplus.Connection(mdsserver)
-
+print('make MDS+ connection')
 
 
 

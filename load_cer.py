@@ -207,7 +207,7 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
 
        
     #time indexes of ative beam 'ts' and times when beams was off for background substraction 'tssub' for 30L and 30R
-    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 5000)
+    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 20)
     
 
    
