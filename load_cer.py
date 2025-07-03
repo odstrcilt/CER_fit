@@ -284,9 +284,10 @@ class CER_interactive:
         connection.openTree('IONS', shot)
         
 
-            
-        self.lineid = connection.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL{channel[1:]}:LINEID ').value
-
+        try:
+            self.lineid = connection.get(f'\\IONS::TOP.CER.CALIBRATION.TANGENTIAL.CHANNEL{channel[1:]}:LINEID ').value
+        except:
+            self.lineid = 'unknown'
         
        
         # get LBO times and SPRED data from external routines
