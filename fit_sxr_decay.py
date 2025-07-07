@@ -107,10 +107,11 @@ class SXR_interactive:
         #use only the last camera
         data_tor = data_tor[:,-12:]
         
-          
-        data_pol = signal_filter(tvec_pol, data_pol)
-        data_tor = signal_filter(tvec_pol, data_tor)
-        
+        try:
+        	data_pol = signal_filter(tvec_pol, data_pol)
+        	data_tor = signal_filter(tvec_pol, data_tor)
+        except:
+        	pass
         #normalise by density
  
         data_pol /= np.interp(tvec_pol, time_dens, dens)[:,None]
@@ -151,8 +152,9 @@ class SXR_interactive:
  
         # get LBO times and SPRED data from external routines
         try:
-            lbo_times = lbo_helpers.get_lbo_times(shot, connection) 
+            lbo_times = lbo_helpers.get_lbo_times(shot, MDSconn) 
         except:
+        
             lbo_times = [0]
             
  
@@ -232,7 +234,7 @@ class SXR_interactive:
          vmax=scale,**img_kwars)
       
        
-        [self.ax[iaxis].axhline(lbo, c='b', lw=.5) for lbo in self.lbo_times]
+        [self.ax[iaxis].axhline(lbo, c='w', lw=.5) for lbo in self.lbo_times]
         
         self.cbar[cam] = plt.colorbar(img, format='%.1g', ax=self.ax[iaxis])      
         self.cbar[cam] = DraggableColorbar(self.cbar[cam], img)
@@ -283,8 +285,10 @@ class SXR_interactive:
             resid = (fun(x,*popt)-y)/e
             chi2 = sum(resid**2/len(x))
             
-            print(2.0 * np.sum(np.diff(resid > 0)) / len(x))
-            err_scale = len(x) / (2.0 * np.sum(np.diff(resid > 0))) * np.sqrt(chi2)
+            
+            
+            #print(2.0 * np.sum(np.diff(resid > 0)) / len(x))
+            err_scale = len(x) / (2.0 * np.sum(np.diff(resid > 0))) * np.sqrt(chi2) / 4
             
             fit_err = np.sqrt(np.diag(pcov)) * err_scale
 
@@ -299,7 +303,7 @@ class SXR_interactive:
                 plt_offset.set_visible(False)
                 
             #uncertainty corrected for chi2/n!=1
-            fit_err = np.sqrt(np.diag(pcov)* chi2)
+            #fit_err = np.sqrt(np.diag(pcov)* chi2)
             #result.set_text(r'$\tau_p$ = %.0f  ms'%(popt[2]*1e3 ))
             result.set_text(r'$\tau_p$ = %.0f+/-%.0f ms'%(popt[2]*1e3, fit_err[2]*1e3))
             ax.figure.canvas.draw()
