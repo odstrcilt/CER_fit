@@ -174,7 +174,7 @@ def get_cer_channels_ions(MDSconn):
 
 
 def load_cer_spectra(shot, channel, average_over_beam_blip):
-    
+    channel = channel.upper()
     beam = '30'
     if not (channel in ['T%.2d'%i for i in np.r_[1:8, 17:23, 25:29, 36:57]] or channel in ['M%.2d'%i for i in np.r_[1:9]]) :
         beam = '33'
@@ -204,13 +204,15 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
        t_start = t_start[~crosstalk]
        pownbi = pownbi[~crosstalk]
        
-
+    #SVD filter for F line
+   # u,s,v = np.linalg.svd(spectra-np.median(spectra,1)[:,None], full_matrices=False)
+  #  noise = np.dot( u[:,:3] * s[:3], v[:3])
+   # spectra -= noise
        
     #time indexes of ative beam 'ts' and times when beams was off for background substraction 'tssub' for 30L and 30R
-    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 20)
+    tssub, ts = load_spectrum.get_tssub(beams, t_start, dt, beam+'L', 5000)
     
-
-   
+    
     if average_over_beam_blip:
         time, stime, spectra, bg_spectra, pow_avg  = load_spectrum.blip_average(spectra, t_start, dt, pownbi)
 
@@ -219,6 +221,7 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
         time = t_start[ts]
         #this will aveverage passive spectra over the whole notch region 
         try:
+        
             time_passive,_, spectra_passive, _, pow_avg_bg = load_spectrum.blip_average(spectra, t_start, dt, pownbi, passive=True)
             from scipy.interpolate import interp1d
             bg_spectra = interp1d(time_passive, spectra_passive, axis=0)(np.clip(time, time_passive[0], time_passive[-1]))
@@ -238,10 +241,12 @@ def load_cer_spectra(shot, channel, average_over_beam_blip):
     
     #correction for varying NBI power
     pow_avg /= pow_avg.mean()
+    #pow_avg = np.sqrt(pow_avg)
     bg_spectra/=pow_avg[:,None]
     spectra/=pow_avg[:,None]
-
-    #embed()
+    
+   # bg_spectra = bg_spectra * 0
+ 
 
     return time, wav_vec, spectra, bg_spectra
 
